@@ -6,6 +6,8 @@ import numpy as np
 from collections import defaultdict
 from multiprocessing import Process, Queue
 
+
+# Turn an all user-item pair interactions dataset into user->items and item->users index thing for fast lookup
 def build_index(dataset_name):
 
     ui_mat = np.loadtxt('data/%s.txt' % dataset_name, dtype=np.int32)
@@ -22,24 +24,24 @@ def build_index(dataset_name):
 
     return u2i_index, i2u_index
 
-# sampler for batch generation
+# randomizer for negative sampling
 def random_neq(l, r, s):
     t = np.random.randint(l, r)
     while t in s:
         t = np.random.randint(l, r)
     return t
 
-
+# worker function for creating training batches
 def sample_function(user_train, usernum, itemnum, batch_size, maxlen, result_queue, SEED):
     def sample(uid):
 
         # uid = np.random.randint(1, usernum + 1)
         while len(user_train[uid]) <= 1: uid = np.random.randint(1, usernum + 1)
 
-        seq = np.zeros([maxlen], dtype=np.int32)
-        pos = np.zeros([maxlen], dtype=np.int32)
-        neg = np.zeros([maxlen], dtype=np.int32)
-        nxt = user_train[uid][-1]
+        seq = np.zeros([maxlen], dtype=np.int32) # sequence of items the user has interacted with
+        pos = np.zeros([maxlen], dtype=np.int32) # positive sample to be predicted (next item in sequence)
+        neg = np.zeros([maxlen], dtype=np.int32) # negative samples (not interacted items)
+        nxt = user_train[uid][-1] # next item to be predicted (last item in a user's sequence)
         idx = maxlen - 1
 
         ts = set(user_train[uid])
@@ -65,12 +67,12 @@ def sample_function(user_train, usernum, itemnum, batch_size, maxlen, result_que
             counter += 1
         result_queue.put(zip(*one_batch))
 
-
+# manager parallel batch generation using multiprocessing
 class WarpSampler(object):
     def __init__(self, User, usernum, itemnum, batch_size=64, maxlen=10, n_workers=1):
         self.result_queue = Queue(maxsize=n_workers * 10)
         self.processors = []
-        for i in range(n_workers):
+        for i in range(n_workers): # Start n_workers processes
             self.processors.append(
                 Process(target=sample_function, args=(User,
                                                       usernum,
@@ -83,10 +85,10 @@ class WarpSampler(object):
             self.processors[-1].daemon = True
             self.processors[-1].start()
 
-    def next_batch(self):
+    def next_batch(self): # Get the next batch of data
         return self.result_queue.get()
 
-    def close(self):
+    def close(self): # Training finished -> terminate all processes
         for p in self.processors:
             p.terminate()
             p.join()

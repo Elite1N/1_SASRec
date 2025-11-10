@@ -39,10 +39,10 @@ if __name__ == '__main__':
 
     u2i_index, i2u_index = build_index(args.dataset)
     
-    # global dataset
+    # global dataset: split the data into train/val/test sets
     dataset = data_partition(args.dataset)
-
     [user_train, user_valid, user_test, usernum, itemnum] = dataset
+    
     # num_batch = len(user_train) // args.batch_size # tail? + ((len(user_train) % args.batch_size) != 0)
     num_batch = (len(user_train) - 1) // args.batch_size + 1
     cc = 0.0
@@ -53,6 +53,7 @@ if __name__ == '__main__':
     f = open(os.path.join(args.dataset + '_' + args.train_dir, 'log.txt'), 'w')
     f.write('epoch (val_ndcg, val_hr) (test_ndcg, test_hr)\n')
     
+    # Create batches from user_train for training the model
     sampler = WarpSampler(user_train, usernum, itemnum, batch_size=args.batch_size, maxlen=args.maxlen, n_workers=3)
     
     
